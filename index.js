@@ -29,7 +29,6 @@ module.exports = {
   },
   connect: function(ssid, pass, cb){
     var exec = require('child_process').execSync;
-    exec
     var scan = exec(commands.wpaScan).toString();
     if ( scan.indexOf(ssid) > -1) {
       var netId = exec(commands.wpaAdd).toString().split('\n')[1];
