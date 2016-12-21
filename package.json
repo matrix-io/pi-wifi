@@ -1,0 +1,20 @@
+{
+  "name": "pi-wifi",
+  "version": "1.0.1",
+  "description": "Module for accessing WiFi via wpa_cli on Raspberry Pi 3.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com/matrix-io/pi-wifi"
+  },
+  "keywords": [
+    "raspberry",
+    "pi",
+    "wifi"
+  ],
+  "author": "Sean Canton <sean.canton@admobilize.com>",
+  "license": "ISC"
+}
