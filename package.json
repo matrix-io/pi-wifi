@@ -1,7 +1,7 @@
 {
   "name": "pi-wifi",
-  "version": "1.0.1",
-  "description": "Module for accessing WiFi via wpa_cli on Raspberry Pi 3.",
+  "version": "1.1.0",
+  "description": "Module for accessing wpa_cli on Raspberry Pi 3.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -15,6 +15,37 @@
     "pi",
     "wifi"
   ],
-  "author": "Sean Canton <sean.canton@admobilize.com>",
-  "license": "ISC"
+  "author": {
+    "name": "Sean Canton",
+    "email": "sean.canton@admobilize.com"
+  },
+  "license": "ISC",
+  "_id": "pi-wifi@1.0.1",
+  "_shasum": "953a178e80cab14f5168f1cf7c2c78053744e9f1",
+  "_from": "pi-wifi@>=1.0.1 <2.0.0",
+  "_npmVersion": "3.10.3",
+  "_nodeVersion": "6.7.0",
+  "_npmUser": {
+    "name": "matrix-io",
+    "email": "appdev@admobilize.com"
+  },
+  "dist": {
+    "shasum": "953a178e80cab14f5168f1cf7c2c78053744e9f1",
+    "tarball": "https://registry.npmjs.org/pi-wifi/-/pi-wifi-1.0.1.tgz"
+  },
+  "maintainers": [
+    {
+      "name": "matrix-io",
+      "email": "appdev@admobilize.com"
+    }
+  ],
+  "_npmOperationalInternal": {
+    "host": "packages-12-west.internal.npmjs.com",
+    "tmp": "tmp/pi-wifi-1.0.1.tgz_1482261858348_0.6249220559839159"
+  },
+  "directories": {},
+  "_resolved": "https://registry.npmjs.org/pi-wifi/-/pi-wifi-1.0.1.tgz",
+  "dependencies": {
+    "wireless-tools": "^0.19.0"
+  }
 }
