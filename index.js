@@ -94,11 +94,11 @@ function openConnection(ssid, callback) {
     function (next) {
       createConnection(function (err, networkId) {
         if (!err) netId = networkId;
-        console.log(netId);
+        //console.log(netId);
         next(err);
       });
     },
-    function (next) { setupConnection(netId, ssid, next); }, //Can't use async.apply due to netId being shared
+    function (next) { setupOpenConnection(netId, ssid, next); }, //Can't use async.apply due to netId being shared
     function (next) { startConnection(netId, next); }
   ], function (err) {
     if (err) {
