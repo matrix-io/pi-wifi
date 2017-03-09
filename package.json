@@ -1,6 +1,6 @@
 {
   "name": "pi-wifi",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Module for accessing wpa_cli on Raspberry Pi 3.",
   "main": "index.js",
   "scripts": {

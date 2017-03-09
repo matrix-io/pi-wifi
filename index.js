@@ -5,7 +5,7 @@ var async = require('async');
 
 var commands = {
   scan: 'sudo iwlist wlan0 scan | grep ESSID | cut \'"\' -f2',
-  wpaScan: "sudo wpa_cli scan"
+  wpaList: 'wpa_cli list_networks'
 };
 
 var myInterface = 'wlan0';
@@ -42,14 +42,14 @@ function findConnection(ssid, callback) {
   var networkId;
   //console.log('Listing...');
   exec(commands.wpaList, function (err, stdout, stderr) {
-
+    
     var networksList = stdout.split("\n");
     var networksArray = new Array();
     var tempNetworkJson, parameters;
 
     networksList.splice(0, 2); //Remove headers
     networksList.splice(networksList.length - 1, 1); //Remove footer
-
+    
     for (var networkIndex in networksList) {
       tempNetworkJson = {};
 
@@ -62,7 +62,7 @@ function findConnection(ssid, callback) {
       };
       networksArray.push(tempNetworkJson);
     }
-
+    
     //console.log('Looking for the network...');
     for (var i = 0; i < networksArray.length; i++) {
       if (networksArray[i].ssid == ssid) {
@@ -94,7 +94,7 @@ function openConnection(ssid, callback) {
     function (next) {
       createConnection(function (err, networkId) {
         if (!err) netId = networkId;
-        //console.log(netId);
+        //console.log('Created network:', netId, err);
         next(err);
       });
     },
@@ -135,7 +135,7 @@ function connection(ssid, password, callback) {
     function (next) {
       createConnection(function (err, networkId) {
         if (!err) netId = networkId;
-        //console.log(netId);
+        //console.log('Created network:', netId, err);
         next(err);
       });
     },
@@ -156,9 +156,10 @@ function connection(ssid, password, callback) {
   });
 }
 
+
 /*
 @method createConnection
-@description Creates a connection record and returns it's network id if successful
+@description Creates a connection record and returns its network id if successful
 @param {Function(err, networkId)} callback Returns error if the network creation fails, Network id
 */
 function createConnection(callback) {
@@ -192,6 +193,60 @@ function setupConnection(networkId, ssid, password, callback) {
     }
   });
 };
+
+
+/*
+@method status
+@description 
+@param {Function(err)} callback Returns error if the process fails, status JSON object with the interface status
+{
+    bssid: '2c:f5:d3:02:ea:d9',
+    frequency: 2412,
+    mode: 'station',
+    key_mgmt: 'wpa2-psk',
+    ssid: 'Fake-Wifi',
+    pairwise_cipher: 'CCMP',
+    group_cipher: 'CCMP',
+    p2p_device_address: 'e4:28:9c:a8:53:72',
+    wpa_state: 'COMPLETED',
+    ip: '10.34.141.168',
+    mac: 'e4:28:9c:a8:53:72',
+    uuid: 'e1cda789-8c88-53e8-ffff-31c304580c1e',
+    id: 0
+}
+*/
+function status(cb) { 
+  tools.wpa.status(myInterface, cb);
+}
+
+
+/*
+@method checkConnection
+@description Returns the state of the network with the ssid specified
+@param {String} ssid Network ssid
+@param {Function(err, result)} Error if unable to get network status, Object with connection details
+{
+  selected: true | false, //
+  connected: true | false,
+  ip: 192.168.0.2
+}
+*/
+function checkConnection(ssid, cb) {
+  var result;
+  status(function (err, status) {
+    if (!err) {
+      if (status.hasOwnProperty('ssid') && status.hasOwnProperty('wpa_state')) {
+        result = {};
+        result.selected = (status.ssid == ssid);
+        if (result.selected) result.connected = (status.wpa_state == 'COMPLETED');
+        if (result.connected && status.ip_address) result.ip = status.ip_address;
+      } else {
+        err = new Error('Incomplete status object');
+      }      
+    } 
+    cb(err, result);
+  });
+}
 
 
 /*
@@ -259,5 +314,7 @@ module.exports = {
   },
   connect: connection,
   connectOpen: openConnection,
-  scan: scan
+  scan: scan,
+  status: status,
+  check: checkConnection
 }
