@@ -3,71 +3,63 @@
 var tools = require('wireless-tools');
 var async = require('async');
 
-var commands = {
+const defaultOpenKey = 'NONE';
+const defaultEnterpriseKey = 'WPA-EAP';
+const defaultSupplicantConfigFile = '/etc/wpa_supplicant/wpa_supplicant.conf';
+const defaultDNSFile = '/etc/resolv.conf';
+const defaultInterface = 'wlan0';
+
+var currentInterface = defaultInterface;
+
+const commands = {
+  detectSupplicant: 'ps -fea | grep -v grep | grep wpa_supplicant',
+  interfaceDown: 'ifdown --force :INTERFACE',
+  interfaceUp: 'ifup :INTERFACE',
   scan: 'sudo iwlist wlan0 scan | grep ESSID | cut \'"\' -f2',
+  startSupplicant: 'sudo wpa_supplicant -Dwext -c :CONFIG_FILE -B -i :INTERFACE  && sudo chattr -i :DNS_FILE',
   wpaList: 'wpa_cli list_networks'
 };
 
-var myInterface = 'wlan0';
-var execSync = require('child_process').execSync;
+
 var exec = require('child_process').exec;
 
-/*
-@method scan
-@description scan available wifi networks (does not list)
-@param {Function} callback
-@return {Array[Object]}
+/**
+* @method scan
+* @description scan available wifi networks (does not list)
+* @param {Function} callback
+* @return {Array[Object]}
 */
 function scan(callback) {
-  tools.wpa.scan(myInterface, function (err, data) {
-    if (err || !data.hasOwnProperty('result') ||  data.result != 'OK') return callback(err, data);
+  tools.wpa.scan(currentInterface, function (err, data) {
+    if (err || !data.hasOwnProperty('result') ||  data.result !== 'OK') return callback(err, data);
     setTimeout(function () {
       //console.log('Scan results:');
-      tools.wpa.scan_results(myInterface, function (err, networks) {
+      tools.wpa.scan_results(currentInterface, function (err, networks) {
         callback(err, networks);
       });
     }, 1000);
   });
-};
+}
 
 
-/*
-@method findConnection
-@description Search a network on the known networks list and return it's network id, fails if not found
-@param {String} ssid Network ssid
-@param {Function(err, networkId)} callback Returns error if the network isn't found, id of the network found
+/**
+* @method findConnection
+* @description Search a network on the known networks list and return it's network id, fails if not found
+* @param {string} ssid Network ssid
+* @param {Function(err, networkId)} callback Returns error if the network isn't found, id of the network found
 */
 function findConnection(ssid, callback) {
 
   var networkId;
   //console.log('Listing...');
-  exec(commands.wpaList, function (err, stdout, stderr) {
-    
-    var networksList = stdout.split("\n");
-    var networksArray = new Array();
-    var tempNetworkJson, parameters;
-
-    networksList.splice(0, 2); //Remove headers
-    networksList.splice(networksList.length - 1, 1); //Remove footer
-    
-    for (var networkIndex in networksList) {
-      tempNetworkJson = {};
-
-      parameters = networksList[networkIndex].split("\t");
-      tempNetworkJson = {
-        network_id: parameters[0],
-        ssid: parameters[1],
-        bssid: parameters[2],
-        flags: parameters[3],
-      };
-      networksArray.push(tempNetworkJson);
-    }
-    
-    //console.log('Looking for the network...');
-    for (var i = 0; i < networksArray.length; i++) {
-      if (networksArray[i].ssid == ssid) {
-        //console.log('Network ' + networksArray[i].network_id + ' found');
-        return callback(err, networksArray[i].network_id);
+  listNetworks(function (err, networksArray) {
+    if (!err) { 
+      //console.log('Looking for the network...');
+      for (var i = 0; i < networksArray.length; i++) {
+        if (networksArray[i].ssid === ssid) {
+          //console.log('Network ' + networksArray[i].network_id + ' found');
+          return callback(err, networksArray[i].network_id);
+        }
       }
     }
     //console.log('Network not found...');
@@ -75,161 +67,221 @@ function findConnection(ssid, callback) {
   });
 }
 
-/*
-@method openConnection
-@description Connects to an open network with the ssid specified
-@param {String} ssid Network ssid
-@param {Function(err)} callback Returns error if the connection isn't successful
+
+/**
+* @method checkConnectionDetails
+* @description Verifies the parameters details and if it isn't properly formed it will return an error, undefined otherwise
+* @param {Object} params Json object with the network parameters
+* @param {Function(err)} callback Returns error if the connection isn't successful
+*/
+function checkConnectionDetails(params) { 
+  var err;
+  //TODO implement this verification (e.g.: If a secure network is missing a password error out)
+  return err;
+}
+
+/**
+ * @method prepareConnectionDetails
+ * @param {Object} details
+ * @return {Object} Returns an adjusted json object with the proper format and default parameters required
+ */
+function prepareConnectionDetails(details) { 
+  
+  var params = {};
+  if (details.hasOwnProperty('ssid')) params.ssid = '\'"' + details.ssid + '"\'';  //Add ssid
+
+  if (!details.hasOwnProperty('password')) {
+    if (!details.hasOwnProperty('key_mgmt')) params.key_mgmt = defaultOpenKey; //Set key_mgmt for an open network
+  } else if (!details.hasOwnProperty('username')) { //If no user then it is a regular secured network
+    params.psk = '\'"' + details.password + '"\'';
+  } else { //If it has password and user it must be an enterprise network
+    params.key_mgmt = defaultEnterpriseKey; //Set key_mgmt for default enterprise network (802.1x)
+    params.identity = '\'"' + details.username + '"\'';
+    params.password = '\'"' + details.password + '"\'';
+    if (!details.hasOwnProperty('eap')) params.eap = 'PEAP';
+    //if (!details.hasOwnProperty('phase2')) params.phase2 = '\'"autheap=MSCHAPV2"\'';
+  }
+
+  if (details.hasOwnProperty('eap')) params.eap = details.eap;
+  if (details.hasOwnProperty('phase1')) params.phase1 = details.phase2;
+  if (details.hasOwnProperty('phase2')) params.phase2 = details.phase2;
+  if (details.hasOwnProperty('key_mgmt')) params.key_mgmt = details.key_mgmt; //Add Key management if found
+
+  return params;
+}
+
+/**
+* @method connection
+* @description Connects to a network with the parameters specified (This can connect to open and secure networks including 802.1x)
+* @param {Object} details Network details
+* - {string} key_mgmt You can specify the type of security to use. (Optional)
+* - {string} ssid (Optional, required for secure and enterprise networks)
+* - {string} username (Optional, required for enterprise networks)
+* - {string} password (Optional, required for secure or enterprise networks)
+* @param {Function(err)} callback Returns error if the connection isn't successful
+*/
+function connection(details, callback) {
+  var netId;
+  
+  var err = checkConnectionDetails(details);
+  if (err) return callback(err);
+
+  var params = prepareConnectionDetails(details);
+
+  findConnection(details.ssid, function (err, networkId) { //Look for an existing connection with that SSID
+    async.series({
+      remove: function(next) { //Remove the network if found
+        if (networkId === undefined) return next(undefined);
+        tools.wpa.remove_network(currentInterface, networkId, next);
+      },
+      create: function(next) { //Create a new network
+        createConnection(function (err, networkId) {
+          if (!err) netId = networkId;
+          //console.log('Created network:', netId, err);
+          next(err);
+        });
+      },
+      setup: function (next) { //Add provided parameters to network
+        setupConnection(netId, params, next);
+      }, //Can't use async.apply due to netId being shared
+      start: function(next) { connectToId(netId, next); } //Actually connect to the network
+    }, function (err, results) {
+      if (err && results.create) tools.wpa.remove_network(currentInterface, netId, callback);
+      else callback(err);
+    });
+  });
+}
+
+
+/**
+* @method openConnection
+* @description Connects to an open network with the ssid specified
+* @param {string} ssid Network ssid
+* @param {Function(err)} callback Returns error if the connection isn't successful
 */
 function openConnection(ssid, callback) {
-  var netId;
-  async.waterfall([
-    async.apply(findConnection, ssid),
-    function (networkId, next) {
-      if (networkId == undefined) return next(networkId);
-      tools.wpa.remove_network(myInterface, networkId, function (err, data) {
-        next(err);
-      });
-    },
-    function (next) {
-      createConnection(function (err, networkId) {
-        if (!err) netId = networkId;
-        //console.log('Created network:', netId, err);
-        next(err);
-      });
-    },
-    function (next) { setupOpenConnection(netId, ssid, next); }, //Can't use async.apply due to netId being shared
-    function (next) { startConnection(netId, next); }
-  ], function (err) {
-    if (err) {
-      if (netId) {
-        tools.wpa.remove_network(myInterface, netId, function (err, data) {
-          return callback(err);
-        });
-      } else {
-        return callback(err);
-      }
-    } else {
-      return callback(err);
-    }
-  });
+  
+  var params = {
+    ssid: ssid
+  };
+  connection(params, callback);
 }
 
-/*
-@method connection
-@description Connects to a network with the ssid specified using the password provided (If a network with that ssid is already  )
-@param {String} ssid Network ssid
-@param {String} ssid Network psk
-@param {Function(err)} callback Returns error if the connection isn't successful
+
+/**
+* @method enterpriseConnection
+* @description Connects to a network with the ssid specified using the password provided (If a network with that ssid is already  )
+* @param {string} ssid Network ssid
+* @param {string} username User/identity to use on authentication
+* @param {string} password Password to use on authentication
+* @param {Function(err)} callback Returns error if the connection isn't successful
 */
-function connection(ssid, password, callback) {
-  var netId;
-  async.waterfall([
-    async.apply(findConnection, ssid),
-    function (networkId, next) {
-      if (networkId == undefined) return next(networkId);
-      tools.wpa.remove_network(myInterface, networkId, function (err, data) {
-        next(err);
-      });
-    },
-    function (next) {
-      createConnection(function (err, networkId) {
-        if (!err) netId = networkId;
-        //console.log('Created network:', netId, err);
-        next(err);
-      });
-    },
-    function (next) { setupConnection(netId, ssid, password, next); }, //Can't use async.apply due to netId being shared
-    function (next) { startConnection(netId, next); }
-  ], function (err) {
-    if (err) {
-      if (netId) {
-        tools.wpa.remove_network(myInterface, netId, function (err, data) {
-          return callback(err);
-        });
-      } else {
-        return callback(err);
-      }
-    } else {
-      return callback(err);
-    }
-  });
+function enterpriseConnection(ssid, username, password, callback) {
+  
+  var params = {
+    ssid: ssid,
+    username: username,
+    password: password
+  };
+  connection(params, callback);
 }
 
 
-/*
-@method createConnection
-@description Creates a connection record and returns its network id if successful
-@param {Function(err, networkId)} callback Returns error if the network creation fails, Network id
+/**
+* @method secureConnection
+* @description Connects to a network with the ssid specified using the password provided (If a network with that ssid is already  )
+* @param {string} ssid Network ssid
+* @param {string} ssid Network psk
+* @param {Function(err)} callback Returns error if the connection isn't successful
+*/
+function secureConnection(ssid, password, callback) {
+
+  var params = {
+    ssid: ssid,
+    password: password
+  };
+  connection(params, callback);
+
+}
+
+
+/** 
+* @method createConnection
+* @description Creates a connection record and returns its network id if successful
+* @param {Function(err, networkId)} callback Returns error if the network creation fails, Network id
 */
 function createConnection(callback) {
-  tools.wpa.add_network(myInterface, function (err, netId) {
-    //if (err) console.log('ERR: ', err);
-    netId = netId.result;
+  tools.wpa.add_network(currentInterface, function (err, netId) {
+    if (!err && netId.hasOwnProperty('result')) netId = netId.result;
     callback(err, netId);
   });
 }
 
 
-/*
-@method setupConnection
-@description Sets the parameters for a secure network
-@param {Integer} networkId Network id
-@param {String} ssid Network ssid
-@param {String} ssid Network psk
-@param {Function(err)} callback Returns error if the process fails
+/**
+* @method setupConnection
+* @description Sets the parameters for a network
+* @param {Integer} networkId Network id
+* @param {Object} params Json object with network parameters to set (Name, Value)
+* @param {Function(err)} callback Returns error if the process fails
 */
-function setupConnection(networkId, ssid, password, callback) {
-  //console.log('Setting ssid...');
-  tools.wpa.set_network(myInterface, networkId, 'ssid', '\'"' + ssid + '"\'', function (err) {
-    if (err) return callback(err);
-    if (!password || password == null || password === '') {
-      callback(err);
-    } else {
-      //console.log('Setting pass...');
-      tools.wpa.set_network(myInterface, networkId, 'psk', '\'"' + password + '"\'', function (err) {
-        return callback(err);
-      });
-    }
-  });
-};
+function setupConnection(netId, params, callback) {
+  async.eachOf(params, function (value, key, next) { //For each one of the parameters listed
+    console.log('>>> Setting', key, 'with', value);
+    setNetworkParameter(currentInterface, netId, key, value, next); //Set it to the network
+  }, callback);
+}  
 
 
-/*
-@method status
-@description 
-@param {Function(err)} callback Returns error if the process fails, status JSON object with the interface status
-{
-    bssid: '2c:f5:d3:02:ea:d9',
-    frequency: 2412,
-    mode: 'station',
-    key_mgmt: 'wpa2-psk',
-    ssid: 'Fake-Wifi',
-    pairwise_cipher: 'CCMP',
-    group_cipher: 'CCMP',
-    p2p_device_address: 'e4:28:9c:a8:53:72',
-    wpa_state: 'COMPLETED',
-    ip: '10.34.141.168',
-    mac: 'e4:28:9c:a8:53:72',
-    uuid: 'e1cda789-8c88-53e8-ffff-31c304580c1e',
-    id: 0
+/**
+ * @method setNetworkParameter
+ * @description 
+ * @param {*} interface 
+ * @param {*} networkId 
+ * @param {*} name 
+ * @param {*} value 
+ * @param {*} callback 
+ */
+function setNetworkParameter(interface, networkId, name, value, callback) { 
+  tools.wpa.set_network(interface, networkId, name, value, callback);
 }
+
+
+/**
+* @method status
+* @description
+* @param {Function(err)} callback Returns error if the process fails, status JSON object with the interface status
+* {
+*   bssid: '2c:f5:d3:02:ea:d9',
+*   frequency: 2412,
+*   mode: 'station',
+*   key_mgmt: 'wpa2-psk',
+*   ssid: 'Fake-Wifi',
+*   pairwise_cipher: 'CCMP',
+*   group_cipher: 'CCMP',
+*   p2p_device_address: 'e4:28:9c:a8:53:72',
+*   wpa_state: 'COMPLETED',
+*   ip: '10.34.141.168',
+*   mac: 'e4:28:9c:a8:53:72',
+*   uuid: 'e1cda789-8c88-53e8-ffff-31c304580c1e',
+*   id: 0
+* }
 */
 function status(cb) { 
-  tools.wpa.status(myInterface, cb);
+  tools.wpa.status(currentInterface, cb);
 }
 
 
-/*
-@method checkConnection
-@description Returns the state of the network with the ssid specified
-@param {String} ssid Network ssid
-@param {Function(err, result)} Error if unable to get network status, Object with connection details
-{
-  selected: true | false, //
-  connected: true | false,
-  ip: 192.168.0.2
-}
+/**
+* @method checkConnection
+* @description Returns the state of the network with the specified ssid
+* @param {string} ssid Network ssid
+* @param {Function(err, result)} Error if unable to get network status, Object with connection details
+* {
+*   selected: true | false, //
+*   connected: true | false,
+*   ip: 192.168.0.2
+* }
 */
 function checkConnection(ssid, cb) {
   var result;
@@ -237,8 +289,8 @@ function checkConnection(ssid, cb) {
     if (!err) {
       if (status.hasOwnProperty('ssid') && status.hasOwnProperty('wpa_state')) {
         result = {};
-        result.selected = (status.ssid == ssid);
-        if (result.selected) result.connected = (status.wpa_state == 'COMPLETED');
+        result.selected = (status.ssid === ssid);
+        if (result.selected) result.connected = (status.wpa_state === 'COMPLETED');
         if (result.connected && status.ip_address) result.ip = status.ip_address;
       } else {
         err = new Error('Incomplete status object');
@@ -249,72 +301,173 @@ function checkConnection(ssid, cb) {
 }
 
 
-/*
-@method setupOpenConnection
-@description Sets the parameters for an open network
-@param {Integer} networkId Network id
-@param {String} ssid Network ssid
-@param {Function(err)} callback Returns error if the process fails
+/**
+* @method connectToId
+* @description Enables a network, saves the configuration and selects the network with the id provided
+* @param {Integer} networkId Network id
+* @param {Function(err)} callback Returns error if the process fails
 */
-function setupOpenConnection(networkId, ssid, callback) {
-  //console.log('Setting ssid ' + ssid + ' to network ' + networkId + '...');
-  tools.wpa.set_network(myInterface, networkId, 'ssid', '\'"' + ssid + '"\'', function (err) {
-    if (err) return callback(err);
-    //console.log('Setting no pass...');
-    tools.wpa.set_network(myInterface, networkId, 'key_mgmt', 'NONE', function (err) {
-      return callback(err);
-    });
-  });
-};
-
-
-/*
-@method startConnection
-@description Enables a network, saves the configuration and selects the network with the id provided
-@param {Integer} networkId Network id
-@param {Function(err)} callback Returns error if the process fails
-*/
-function startConnection(networkId, callback) {
+function connectToId(networkId, callback) {
   //console.log('Enabling network ' + networkId + '...');
-  tools.wpa.enable_network(myInterface, networkId, function (err, data) {
-    if (err || !data.hasOwnProperty('result') ||  data.result != 'OK') return callback(err, data);
+  tools.wpa.enable_network(currentInterface, networkId, function (err, data) {
+    if (err || !data.hasOwnProperty('result') ||  data.result !== 'OK') return callback(err, data);
     //console.log('Saving config...');
-    tools.wpa.save_config(myInterface, function (err) {
-      if (err || !data.hasOwnProperty('result') ||  data.result != 'OK') return callback(err, data);
+    tools.wpa.save_config(currentInterface, function (err) {
+      if (err || !data.hasOwnProperty('result') ||  data.result !== 'OK') return callback(err, data);
       //console.log('Selecting network...');
-      tools.wpa.select_network(myInterface, networkId, function (err, data) {
-        if (err || !data.hasOwnProperty('result') || data.result != 'OK') return callback(err, data);
+      tools.wpa.select_network(currentInterface, networkId, function (err, data) {
+        if (err || !data.hasOwnProperty('result') || data.result !== 'OK') return callback(err, data);
         callback();
       });
     });
   });
-};
+}
 
+
+/**
+ * @method detectSupplicant
+ * @description Looks for a running wpa_supplicant process and if so returns the config file and interface used
+ * @param {function} callback (err, wInterface, configFile) Error if the process failed or no supplicant is running, Interface used, Config file used
+ */
+function detectSupplicant(callback) {
+  exec(commands.detectSupplicant, function (err, stdout) {
+    var wInterface, configFile;
+    var result = false;
+    if (!err) {
+      var lines = stdout.split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].indexOf('wlan') > -1) {
+          var options = lines[i].split(' ');
+          if (options.indexOf('-i') > -1) wInterface = options[options.indexOf('-i') + 1];
+          if (options.indexOf('-c') > -1) configFile = options[options.indexOf('-c') + 1];
+          result = true;
+        }
+      }
+    }
+    callback(err, wInterface, configFile);
+  });
+}
+
+
+/**
+ * @method startSupplicant
+ * @description Starts a wpa_supplicant instance
+ * @param {string} wInterface Interface to use
+ * @param {string} configFile Configuration file for the supplicant file. Defaults to /etc/wpa_supplicant/wpa_supplicant.conf
+ * @param {string} dnsFile DNS file to use. Defaults to /etc/resolv.conf
+ * @param {function} callback (err) Error if the process fails
+ */
+function startSupplicant(wInterface, configFile, dnsFile, callback) {
+  wInterface = wInterface || currentInterface;
+  configFile = configFile || defaultSupplicantConfigFile;
+  dnsFile = dnsFile ||  defaultDNSFile;
+  exec(replaceInCommand(commands.startSupplicant, { config_file: configFile, interface: wInterface, dns_file: dnsFile }), function (err) {
+    callback(err);
+  });
+}
+
+
+/**
+ * @method interfaceUp
+ * @description Raises the interface provided
+ * @param {*} wInterface Interface to start
+ * @param {*} callback (err) Returns an error if the process fails
+ */
+function interfaceUp(wInterface, callback) {
+  wInterface = wInterface || currentInterface;
+  exec(replaceInCommand(commands.interfaceUp, { interface: wInterface }), function (err) {
+    callback(err);
+  });
+}
+
+
+/**
+ * @method interfaceDown
+ * @description Drops the interface provided
+ * @param {*} wInterface Interface to stop
+ * @param {*} callback (err) Returns an error if the process fails
+ */
+function interfaceDown(wInterface, callback) {
+  wInterface = wInterface || currentInterface;
+  exec(replaceInCommand(commands.interfaceDown, { interface: wInterface }), function (err) {
+    callback(err);
+  });
+}
+
+/**
+ * @method restartInterface
+ * @description Restarts the interface provided
+ * @param {*} wInterface Interface to restart
+ * @param {*} callback (err) Returns an error if the process fails
+ */
+function restartInterface(wInterface, callback) {
+  async.series([
+    async.apply(interfaceDown, wInterface),
+    async.apply(interfaceUp, wInterface),
+  ], callback);
+}
+
+
+/**
+ * @method listNetworks
+ * @description List the networks in an array, each network has Network ID, SSID, BSSID and FLAGS
+ * @param {function} callback (err, networksArray) returns err if the process fails, each network is a Json object that contains network_id, ssid, bssid and flags
+ */
+function listNetworks(callback) {
+  exec(commands.wpaList, function (err, stdout) {
+    var tempNetworkJson, parameters, networksArray;
+
+    if (!err) { 
+      var networksList = stdout.split('\n');
+      networksArray = [];
+      networksList.splice(0, 2); //Remove headers
+      networksList.splice(networksList.length - 1, 1); //Remove footer
+
+      for (var networkIndex in networksList) {
+        tempNetworkJson = {};
+
+        parameters = networksList[networkIndex].split('\t');
+        tempNetworkJson = {
+          network_id: parameters[0],
+          ssid: parameters[1],
+          bssid: parameters[2],
+          flags: parameters[3],
+        };
+        networksArray.push(tempNetworkJson);
+      }
+    }
+
+    callback(err, networksArray);
+  });
+}
+
+/**
+ * @method replaceInCommand
+ * @description Used to replace preset variables strings (e.g.: This is a :VAR text)
+ * @param {string} text Text containg the variables to be replaced
+ * @param {Object} toReplace Json object that contains the string to find (key) and the replace string (value)
+ * @return Returns the text after replacing the variables
+ */
+function replaceInCommand(text, toReplace) {
+  for (var placeHolder in toReplace) {
+    text = text.replace(new RegExp(':' + placeHolder.toUpperCase(), 'g'), toReplace[placeHolder]);
+  }
+  return text;
+}
 
 module.exports = {
-  /*
-  @method check
-  @description Checks if a network is present
-  @param {String} ssid Network ssid
-  @param {Function(err, ssid)} callback Returns error if the process fails, ssid
-  */
-  check: function (ssid, cb) {
-    var wifiList = [];
-    var scan = execSync(commands.scan);
-    scan.stdout.on('message', function (data) {
-      wifiList.push(data)
-    });
-    scan.on('exit', function () {
-      if (wifiList.indexOf(ssid) === -1) {
-        cb('SSID Not Found')
-      } else {
-        cb(null, ssid)
-      }
-    })
-  },
-  connect: connection,
+  check: checkConnection,
+  connectTo: connection,
+  connectToId: connectToId,
+  connect: secureConnection,
   connectOpen: openConnection,
+  connectEAP: enterpriseConnection,
+  detectSupplicant: detectSupplicant,
+  listNetworks: listNetworks,
+  interfaceDown: interfaceDown,
+  interfaceUp: interfaceUp,
+  restartInterface: restartInterface,
   scan: scan,
-  status: status,
-  check: checkConnection
+  startSupplicant: startSupplicant,
+  status: status
 }
