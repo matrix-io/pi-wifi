@@ -25,13 +25,13 @@ var exec = require('child_process').exec;
 
 /**
 * @method scan
-* @description scan available wifi networks (does not list)
+* @description scan available wifi networks
 * @param {Function} callback
 * @return {Array[Object]}
 */
 function scan(callback) {
   tools.wpa.scan(currentInterface, function (err, data) {
-    if (err || !data.hasOwnProperty('result') ||  data.result !== 'OK') return callback(err, data);
+    if (err || !data.hasOwnProperty('result') || data.result !== 'OK') return callback(err, data);
     setTimeout(function () {
       //console.log('Scan results:');
       tools.wpa.scan_results(currentInterface, function (err, networks) {
@@ -53,7 +53,7 @@ function findConnection(ssid, callback) {
   var networkId;
   //console.log('Listing...');
   listNetworks(function (err, networksArray) {
-    if (!err) { 
+    if (!err) {
       //console.log('Looking for the network...');
       for (var i = 0; i < networksArray.length; i++) {
         if (networksArray[i].ssid === ssid) {
@@ -67,6 +67,15 @@ function findConnection(ssid, callback) {
   });
 }
 
+/**
+* @method setCurrentInterface
+* @description Specify the interface to use
+* @param {string} iface Intertface to set
+*/
+function setCurrentInterface(iface) {
+  currentInterface = iface;
+  return;
+}
 
 /**
 * @method checkConnectionDetails
@@ -74,7 +83,7 @@ function findConnection(ssid, callback) {
 * @param {Object} params Json object with the network parameters
 * @param {Function(err)} callback Returns error if the connection isn't successful
 */
-function checkConnectionDetails(params) { 
+function checkConnectionDetails(/*params*/) {
   var err;
   //TODO implement this verification (e.g.: If a secure network is missing a password error out)
   return err;
@@ -85,8 +94,8 @@ function checkConnectionDetails(params) {
  * @param {Object} details
  * @return {Object} Returns an adjusted json object with the proper format and default parameters required
  */
-function prepareConnectionDetails(details) { 
-  
+function prepareConnectionDetails(details) {
+
   var params = {};
   if (details.hasOwnProperty('ssid')) params.ssid = '\'"' + details.ssid + '"\'';  //Add ssid
 
@@ -122,7 +131,7 @@ function prepareConnectionDetails(details) {
 */
 function connection(details, callback) {
   var netId;
-  
+
   var err = checkConnectionDetails(details);
   if (err) return callback(err);
 
@@ -160,7 +169,7 @@ function connection(details, callback) {
 * @param {Function(err)} callback Returns error if the connection isn't successful
 */
 function openConnection(ssid, callback) {
-  
+
   var params = {
     ssid: ssid
   };
@@ -170,14 +179,14 @@ function openConnection(ssid, callback) {
 
 /**
 * @method enterpriseConnection
-* @description Connects to a network with the ssid specified using the password provided (If a network with that ssid is already  )
+* @description Connects to a network with the ssid specified using the password provided
 * @param {string} ssid Network ssid
 * @param {string} username User/identity to use on authentication
 * @param {string} password Password to use on authentication
 * @param {Function(err)} callback Returns error if the connection isn't successful
 */
 function enterpriseConnection(ssid, username, password, callback) {
-  
+
   var params = {
     ssid: ssid,
     username: username,
@@ -189,7 +198,7 @@ function enterpriseConnection(ssid, username, password, callback) {
 
 /**
 * @method secureConnection
-* @description Connects to a network with the ssid specified using the password provided (If a network with that ssid is already  )
+* @description Connects to a network with the ssid specified using the password provided
 * @param {string} ssid Network ssid
 * @param {string} ssid Network psk
 * @param {Function(err)} callback Returns error if the connection isn't successful
@@ -230,27 +239,34 @@ function setupConnection(netId, params, callback) {
     console.log('>>> Setting', key, 'with', value);
     setNetworkParameter(currentInterface, netId, key, value, next); //Set it to the network
   }, callback);
-}  
+}
 
 
 /**
  * @method setNetworkParameter
- * @description 
- * @param {*} interface 
- * @param {*} networkId 
- * @param {*} name 
- * @param {*} value 
- * @param {*} callback 
+ * @description Sets a network parameter
+ * @param {string} interface Interface to use
+ * @param {integer} networkId Network to set it to
+ * @param {string} name Parameter key/name
+ * @param {string} value Parameter value
+ * @param {function} callback Returns an error if the parameter wasn't set
  */
-function setNetworkParameter(interface, networkId, name, value, callback) { 
+function setNetworkParameter(interface, networkId, name, value, callback) {
   tools.wpa.set_network(interface, networkId, name, value, callback);
 }
 
 
 /**
 * @method status
-* @description
+* @description Show status parameters of the interface specified, if no interface is provided the selected one is used
+* @param {string} iface Interface to get status from. (If not provided it defaults to the currently selected one)
 * @param {Function(err)} callback Returns error if the process fails, status JSON object with the interface status
+* @example
+*
+* status('wlan0', function(err, status){
+*   if(!err) console.log(status);
+* });
+* // => 
 * {
 *   bssid: '2c:f5:d3:02:ea:d9',
 *   frequency: 2412,
@@ -267,8 +283,12 @@ function setNetworkParameter(interface, networkId, name, value, callback) {
 *   id: 0
 * }
 */
-function status(cb) { 
-  tools.wpa.status(currentInterface, cb);
+function status(iface, cb) {
+  if (cb === undefined) {
+    cb = iface;
+    iface = currentInterface;
+  }  
+  tools.wpa.status(iface, cb);
 }
 
 
@@ -278,8 +298,8 @@ function status(cb) {
 * @param {string} ssid Network ssid
 * @param {Function(err, result)} Error if unable to get network status, Object with connection details
 * {
-*   selected: true | false, //
-*   connected: true | false,
+*   selected: true | false,
+*   connected: true | false,
 *   ip: 192.168.0.2
 * }
 */
@@ -287,15 +307,15 @@ function checkConnection(ssid, cb) {
   var result;
   status(function (err, status) {
     if (!err) {
+      result = { selected: false, connected: false };
       if (status.hasOwnProperty('ssid') && status.hasOwnProperty('wpa_state')) {
-        result = {};
         result.selected = (status.ssid === ssid);
         if (result.selected) result.connected = (status.wpa_state === 'COMPLETED');
-        if (result.connected && status.ip_address) result.ip = status.ip_address;
+        if (result.connected && status.ip) result.ip = status.ip;
       } else {
         err = new Error('Incomplete status object');
-      }      
-    } 
+      }
+    }
     cb(err, result);
   });
 }
@@ -310,13 +330,13 @@ function checkConnection(ssid, cb) {
 function connectToId(networkId, callback) {
   //console.log('Enabling network ' + networkId + '...');
   tools.wpa.enable_network(currentInterface, networkId, function (err, data) {
-    if (err || !data.hasOwnProperty('result') ||  data.result !== 'OK') return callback(err, data);
+    if (err || !data.hasOwnProperty('result') || data.result !== 'OK') return callback(err);
     //console.log('Saving config...');
     tools.wpa.save_config(currentInterface, function (err) {
-      if (err || !data.hasOwnProperty('result') ||  data.result !== 'OK') return callback(err, data);
+      if (err || !data.hasOwnProperty('result') || data.result !== 'OK') return callback(err);
       //console.log('Selecting network...');
       tools.wpa.select_network(currentInterface, networkId, function (err, data) {
-        if (err || !data.hasOwnProperty('result') || data.result !== 'OK') return callback(err, data);
+        if (err || !data.hasOwnProperty('result') || data.result !== 'OK') return callback(err);
         callback();
       });
     });
@@ -327,24 +347,24 @@ function connectToId(networkId, callback) {
 /**
  * @method detectSupplicant
  * @description Looks for a running wpa_supplicant process and if so returns the config file and interface used
- * @param {function} callback (err, wInterface, configFile) Error if the process failed or no supplicant is running, Interface used, Config file used
+ * @param {function} callback (err, iface, configFile) Error if the process failed or no supplicant is running, Interface used, Config file used
  */
 function detectSupplicant(callback) {
   exec(commands.detectSupplicant, function (err, stdout) {
-    var wInterface, configFile;
+    var iface, configFile;
     var result = false;
     if (!err) {
       var lines = stdout.split('\n');
       for (var i = 0; i < lines.length; i++) {
         if (lines[i].indexOf('wlan') > -1) {
           var options = lines[i].split(' ');
-          if (options.indexOf('-i') > -1) wInterface = options[options.indexOf('-i') + 1];
+          if (options.indexOf('-i') > -1) iface = options[options.indexOf('-i') + 1];
           if (options.indexOf('-c') > -1) configFile = options[options.indexOf('-c') + 1];
           result = true;
         }
       }
     }
-    callback(err, wInterface, configFile);
+    callback(err, iface, configFile);
   });
 }
 
@@ -352,30 +372,31 @@ function detectSupplicant(callback) {
 /**
  * @method startSupplicant
  * @description Starts a wpa_supplicant instance
- * @param {string} wInterface Interface to use
- * @param {string} configFile Configuration file for the supplicant file. Defaults to /etc/wpa_supplicant/wpa_supplicant.conf
- * @param {string} dnsFile DNS file to use. Defaults to /etc/resolv.conf
+ * @param {object} options Json object where the interface, config file and dns file to use can be specified, otherwhise default values will be selected
+ * - iface: Interface to use. Defaults to the currently selected one
+ * - config: Configuration file for the supplicant file. Defaults to /etc/wpa_supplicant/wpa_supplicant.conf
+ * - dns: DNS file to use. Defaults to /etc/resolv.conf
  * @param {function} callback (err) Error if the process fails
  */
-function startSupplicant(wInterface, configFile, dnsFile, callback) {
-  wInterface = wInterface || currentInterface;
-  configFile = configFile || defaultSupplicantConfigFile;
-  dnsFile = dnsFile ||  defaultDNSFile;
-  exec(replaceInCommand(commands.startSupplicant, { config_file: configFile, interface: wInterface, dns_file: dnsFile }), function (err) {
-    callback(err);
-  });
+function startSupplicant(options, callback) {
+  if (callback === undefined) callback = options; //If no options is passed and just the callback is provided
+  
+  var iface = options.hasOwnProperty('iface') ? options.iface : currentInterface;
+  var configFile = options.hasOwnProperty('config') ? options.config : defaultSupplicantConfigFile;
+  var dnsFile = options.hasOwnProperty('dns') ? options.dns : defaultDNSFile;
+  exec(replaceInCommand(commands.startSupplicant, { config_file: configFile, interface: iface, dns_file: dnsFile }), callback);
 }
 
 
 /**
  * @method interfaceUp
  * @description Raises the interface provided
- * @param {*} wInterface Interface to start
- * @param {*} callback (err) Returns an error if the process fails
+ * @param {string} iface Interface to start
+ * @param {function} callback (err) Returns an error if the process fails
  */
-function interfaceUp(wInterface, callback) {
-  wInterface = wInterface || currentInterface;
-  exec(replaceInCommand(commands.interfaceUp, { interface: wInterface }), function (err) {
+function interfaceUp(iface, callback) {
+  iface = iface || currentInterface;
+  exec(replaceInCommand(commands.interfaceUp, { interface: iface }), function (err) {
     callback(err);
   });
 }
@@ -384,12 +405,12 @@ function interfaceUp(wInterface, callback) {
 /**
  * @method interfaceDown
  * @description Drops the interface provided
- * @param {*} wInterface Interface to stop
- * @param {*} callback (err) Returns an error if the process fails
+ * @param {string} iface Interface to stop
+ * @param {function} callback (err) Returns an error if the process fails
  */
-function interfaceDown(wInterface, callback) {
-  wInterface = wInterface || currentInterface;
-  exec(replaceInCommand(commands.interfaceDown, { interface: wInterface }), function (err) {
+function interfaceDown(iface, callback) {
+  iface = iface || currentInterface;
+  exec(replaceInCommand(commands.interfaceDown, { interface: iface }), function (err) {
     callback(err);
   });
 }
@@ -397,13 +418,13 @@ function interfaceDown(wInterface, callback) {
 /**
  * @method restartInterface
  * @description Restarts the interface provided
- * @param {*} wInterface Interface to restart
- * @param {*} callback (err) Returns an error if the process fails
+ * @param {string} iface Interface to restart
+ * @param {function} callback (err) Returns an error if the process fails
  */
-function restartInterface(wInterface, callback) {
+function restartInterface(iface, callback) {
   async.series([
-    async.apply(interfaceDown, wInterface),
-    async.apply(interfaceUp, wInterface),
+    async.apply(interfaceDown, iface),
+    async.apply(interfaceUp, iface),
   ], callback);
 }
 
@@ -417,7 +438,7 @@ function listNetworks(callback) {
   exec(commands.wpaList, function (err, stdout) {
     var tempNetworkJson, parameters, networksArray;
 
-    if (!err) { 
+    if (!err) {
       var networksList = stdout.split('\n');
       networksArray = [];
       networksList.splice(0, 2); //Remove headers
@@ -468,6 +489,7 @@ module.exports = {
   interfaceUp: interfaceUp,
   restartInterface: restartInterface,
   scan: scan,
+  setCurrentInterface: setCurrentInterface,
   startSupplicant: startSupplicant,
   status: status
 }
