@@ -2,36 +2,40 @@
 
 The purpose of this module is to provide tools to connect to a Wifi
 
-## Table of Contents
+# Table of Contents
 
 - [Installation](#installation) - How to install the module
-- [Usage](#usage) - Getting started
 - [API](#api) - Commands available
   - [check(ssid, callback)](#checkssid-callback) - State of the network with the specified ssid
-  - [connectTo(ssid, callback)](#connecttossid-callback) - State of the network with the specified ssid
-  - [connectToId(networkId, callback)](#connectToIdnetworkId-callback) - Connects to a network with the parameters specified (This can connect to open and secure networks including 802.1x)
+  - [connectTo(details, callback)](#connecttodetails-callback) - State of the network with the specified ssid
+  - [connectToId(networkId, callback)](#connecttoidnetworkid-callback) - Connects to a network with the parameters specified (This can connect to open and secure networks including 802.1x)
   - [connect(ssid, password, callback)](#connectssid-password-callback) - Connects to a network with the ssid specified using the password provided
-  - [connectOpen(ssid, callback)](#connectOpenssid-callback) - Connects to an open network with the ssid specified
-  - [connectEAP(ssid, password, callback)](#connectEAPssid-password-callback) - Connects to a network with the ssid specified using the password provided
-  - [detectSupplicant(callback)](#detectSupplicantcallback) - Looks for a running wpa_supplicant process and if so returns the config file and interface used
-  - [listNetworks(callback)](#listNetworkscallback) - List the networks in an array, each network has Network ID, SSID, BSSID and FLAGS
-  - [interfaceDown(callback)](#interfaceDowncallback) - Drops the interface provided
-  - [interfaceUp(callback)](#interfaceUpcallback) - Raises the interface provided
-  - [restartInterface(callback)](#restartInterfacecallback) - Restarts the interface provided
+  - [connectOpen(ssid, callback)](#connectopenssid-callback) - Connects to an open network with the ssid specified
+  - [connectEAP(ssid, password, callback)](#connecteapssid-password-callback) - Connects to a network with the ssid specified using the password provided
+  - [detectSupplicant(callback)](#detectsupplicantcallback) - Looks for a running wpa_supplicant process and if so returns the config file and interface used
+  - [listNetworks(callback)](#listnetworkscallback) - List the networks in an array, each network has Network ID, SSID, BSSID and FLAGS
+  - [interfaceDown(callback)](#interfacedowncallback) - Drops the interface provided
+  - [interfaceUp(callback)](#interfaceupcallback) - Raises the interface provided
+  - [restartInterface(callback)](#restartinterfacecallback) - Restarts the interface provided
   - [scan(callback)](#scancallback) - Scan available wifi networks
-  - [setCurrentInterface(iface)](#setCurrentInterfaceiface) - Specify the interface to use
-  - [startSupplicant(callback)](#startSupplicantcallback) - Starts a wpa_supplicant instance
+  - [setCurrentInterface(iface)](#setcurrentinterfaceiface) - Specify the interface to use
+  - [startSupplicant(callback)](#startsupplicantcallback) - Starts a wpa_supplicant instance
   - [status(iface, callback)](#statusiface-callback) - Show status parameters of the interface specified, if no interface is provided the selected one is used
 - [Notes](#notes)
 
 
-## Installation
+# Installation
 
 On your project root execute:
 
 ``` shell
 $ npm install --save pi-wifi
 ```
+
+# API
+
+The following is the list of functions available:
+
 
 ## check(ssid, callback)
 The **check** function is used to return the state of the network with the specified ssid
@@ -288,7 +292,7 @@ piWifi.startSupplicant({iface: 'wlan0', config: '/etc/wpa_supplicant/wpa_supplic
 
 ```
 
-# status(iface, callback)
+## status(iface, callback)
 The **status** function is used to show status parameters of the interface specified, if no interface is provided the selected one is used
 
 ``` javascript
