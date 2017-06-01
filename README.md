@@ -12,10 +12,12 @@ The purpose of this module is to provide tools to connect to a Wifi
   - [connect(ssid, password, callback)](#connectssid-password-callback) - Connects to a network with the ssid specified using the password provided
   - [connectOpen(ssid, callback)](#connectopenssid-callback) - Connects to an open network with the ssid specified
   - [connectEAP(ssid, password, callback)](#connecteapssid-password-callback) - Connects to a network with the ssid specified using the password provided
+  - [disconnect(callback)](#disconnectcallback) - Disconnects from the network on the current interface
   - [detectSupplicant(callback)](#detectsupplicantcallback) - Looks for a running wpa_supplicant process and if so returns the config file and interface used
-  - [listNetworks(callback)](#listnetworkscallback) - List the networks in an array, each network has Network ID, SSID, BSSID and FLAGS
   - [interfaceDown(callback)](#interfacedowncallback) - Drops the interface provided
   - [interfaceUp(callback)](#interfaceupcallback) - Raises the interface provided
+  - [killSupplicant(callback)](#killsupplicantcallback) - Kills the supplicant process for the specified interface
+  - [listNetworks(callback)](#listnetworkscallback) - List the networks in an array, each network has Network ID, SSID, BSSID and FLAGS
   - [restartInterface(callback)](#restartinterfacecallback) - Restarts the interface provided
   - [scan(callback)](#scancallback) - Scan available wifi networks
   - [setCurrentInterface(iface)](#setcurrentinterfaceiface) - Specify the interface to use
@@ -64,7 +66,7 @@ The **details** object can contain the following:
 - ***key_mgmt*** You can specify the type of security to use. (Optional)
 - ***ssid*** (required for secure and enterprise networks)
 - ***username*** (required for enterprise networks)
-- ***password*** (required for enterprise networks)	
+- ***password*** (required for enterprise networks)
 - ***eap***
 - ***phase1***
 - ***phase2***
@@ -78,14 +80,33 @@ var networkDetails = {
   password: 'swordfish'
 };
 
-piWifi.connectTo(details, function(err) {
+//A simple connection
+piWifi.connectTo(networkDetails, function(err) {
   if(!err) {
-    console.log('Connection was successful!');
+    console.log('Network created successfully!');
   } else {
     console.log(err.message); //Failed to connect
   }
 });
-*/
+
+//After creating a succesful connection, you could use the function check to verify
+var ssid = 'MyOpenNetwork';
+piWifi.connectTo({ssid: ssid}}, function(err) {
+  if (!err) { //Network created correctly
+    setTimeout(function () {
+      piwifi.check(ssid, function (err, status) {
+        if (!err && status.connected) {
+          console.log('Connected to the network ' + ssid + '!');
+        } else {
+          console.log('Unable to connect to the network ' + ssid + '!');
+        }
+      });
+    }, 2000);
+  } else {
+    console.log('Unable to create the network ' + ssid + '.');
+  }
+});
+
 ```
 
 ## connectToId(networkId, callback)
@@ -148,6 +169,19 @@ piWifi.connectEAP('myTestNetwork', 'MyTestUsername', 'MyTestPassword', function(
 });
 ```
 
+## disconnect(callback)
+The **disconnect** function is used to disconnect from the network on the current interface
+``` javascript
+var piWifi = require('pi-wifi');
+
+piWifi.disconnect(function(err) {
+  if (err) {
+    return console.error(err.message);
+  }
+  console.log('Disconnected from network!');
+});
+```
+
 ## detectSupplicant(callback)
 The **detectSupplicant** function is used to look for a running wpa_supplicant process and if found returns the config file and interface used
 
@@ -160,24 +194,6 @@ piWifi.detectSupplicant(function(err, iface, configFile) {
   }
   console.log('Supplicant running in interface', iface, 'using the configuration file', configFile);
 });
-```
-
-## listNetworks(callback)
-The **listNetworks** function is used to list the networks in an array, each network has Network ID, SSID, BSSID and FLAGS
-
-``` javascript
-var piWifi = require('pi-wifi');
-
-piWifi.listNetworks(function(err, networksArray) {
-  if (err) {
-    return console.error(err.message);
-  }
-  console.log(networksArray);
-});
-
-// =>
-// [{ network_id: 0, ssid: 'MyNetwork', bssid: 'any', flags: '[DISABLED]' },
-// { network_id: 1, ssid: 'Skynet', bssid: 'any', flags: '[CURRENT]' }]
 ```
 
 ## interfaceDown(callback)
@@ -206,6 +222,37 @@ piWifi.interfaceUp('wlan0', function(err) {
   }
   console.log('Interface raised succesfully!');
 });
+```
+
+## killSupplicant(callback)
+The **killSupplicant** function is used to kill the supplicant process for the specified interface
+``` javascript
+var piWifi = require('pi-wifi');
+
+piWifi.killSupplicant('wlan0', function(err) {
+  if (err) {
+    return console.error(err.message);
+  }
+  console.log('Supplicant process terminated!');
+});
+```
+
+## listNetworks(callback)
+The **listNetworks** function is used to list the networks in an array, each network has Network ID, SSID, BSSID and FLAGS
+
+``` javascript
+var piWifi = require('pi-wifi');
+
+piWifi.listNetworks(function(err, networksArray) {
+  if (err) {
+    return console.error(err.message);
+  }
+  console.log(networksArray);
+});
+
+// =>
+// [{ network_id: 0, ssid: 'MyNetwork', bssid: 'any', flags: '[DISABLED]' },
+// { network_id: 1, ssid: 'Skynet', bssid: 'any', flags: '[CURRENT]' }]
 ```
 
 ## restartInterface(callback)

@@ -17,6 +17,8 @@ const commands = {
   interfaceUp: 'ifup :INTERFACE',
   scan: 'sudo iwlist wlan0 scan | grep ESSID | cut \'"\' -f2',
   startSupplicant: 'sudo wpa_supplicant -Dwext -c :CONFIG_FILE -B -i :INTERFACE  && sudo chattr -i :DNS_FILE',
+  wpaDisconnect: 'wpa_cli disconnect',
+  wpaInterface: 'wpa_cli interface :INTERFACE',
   wpaList: 'wpa_cli list_networks'
 };
 
@@ -71,10 +73,13 @@ function findConnection(ssid, callback) {
 * @method setCurrentInterface
 * @description Specify the interface to use
 * @param {string} iface Intertface to set
+* @param {function} callback Returns error if unable to set the interface
 */
-function setCurrentInterface(iface) {
-  currentInterface = iface;
-  return;
+function setCurrentInterface(iface, callback) {
+  exec(replaceInCommand(commands.wpaInterface, { interface: iface }), function (err) { 
+    if (!err) currentInterface = iface;
+    return callback(err);
+  });
 }
 
 /**
@@ -121,13 +126,13 @@ function prepareConnectionDetails(details) {
 
 /**
 * @method connection
-* @description Connects to a network with the parameters specified (This can connect to open and secure networks including 802.1x)
+* @description Connects to a network with the parameters specified (This can connect to open and secure networks including EAP 802.1x)
 * @param {Object} details Network details
 * - {string} key_mgmt You can specify the type of security to use. (Optional)
 * - {string} ssid (Optional, required for secure and enterprise networks)
 * - {string} username (Optional, required for enterprise networks)
 * - {string} password (Optional, required for secure or enterprise networks)
-* @param {Function(err)} callback Returns error if the connection isn't successful
+* @param {Function(err)} callback Returns error if the network creation isn't successful
 */
 function connection(details, callback) {
   var netId;
@@ -463,6 +468,30 @@ function listNetworks(callback) {
 }
 
 /**
+ * @method disconnect
+ * @description Disconnects from the network on the current interface
+ * @param {function} callback (err) returns err if the process fails
+ */
+function disconnect(callback) {
+  exec(commands.wpaDisconnect, callback);
+}
+
+
+/**
+ * @method disableSupplicant
+ * @description Kills the supplicant process for the specified interface
+ * @param {string} iface Interface used by supplicant (If not iface is supplied the current one will be used)
+ * @param {function} callback (err) returns err if unable to kill the process
+ */
+function disableSupplicant(iface, callback) {
+  if (callback === undefined) {
+    callback = iface; //If no options is passed and just the callback is provided
+    iface = currentInterface;
+  }
+  tools.wpa_supplicant.disable(iface, callback);
+}
+
+/**
  * @method replaceInCommand
  * @description Used to replace preset variables strings (e.g.: This is a :VAR text)
  * @param {string} text Text containg the variables to be replaced
@@ -483,10 +512,12 @@ module.exports = {
   connect: secureConnection,
   connectOpen: openConnection,
   connectEAP: enterpriseConnection,
+  disconnect: disconnect,
   detectSupplicant: detectSupplicant,
-  listNetworks: listNetworks,
   interfaceDown: interfaceDown,
   interfaceUp: interfaceUp,
+  killSupplicant: disableSupplicant,
+  listNetworks: listNetworks,
   restartInterface: restartInterface,
   scan: scan,
   setCurrentInterface: setCurrentInterface,
