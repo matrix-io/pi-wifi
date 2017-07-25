@@ -17,6 +17,7 @@ The purpose of this module is to provide tools to connect to a Wifi
   - [interfaceDown(callback)](#interfacedowncallback) - Drops the interface provided
   - [interfaceUp(callback)](#interfaceupcallback) - Raises the interface provided
   - [killSupplicant(callback)](#killsupplicantcallback) - Kills the supplicant process for the specified interface
+  - [listInterfaces(callback)](#listinterfacescallback) - List the available interface names in an array
   - [listNetworks(callback)](#listnetworkscallback) - List the networks in an array, each network has Network ID, SSID, BSSID and FLAGS
   - [restartInterface(callback)](#restartinterfacecallback) - Restarts the interface provided
   - [scan(callback)](#scancallback) - Scan available wifi networks
@@ -235,6 +236,23 @@ piWifi.killSupplicant('wlan0', function(err) {
   }
   console.log('Supplicant process terminated!');
 });
+```
+
+## listInterfaces(callback)
+The **listInterfaces** function is used to list the available network interfaces' names
+
+``` javascript
+var piWifi = require('pi-wifi');
+
+piWifi.listInterfaces(function(err, interfacesArray) {
+  if (err) {
+    return console.error(err.message);
+  }
+  console.log(interfacesArray);
+});
+
+// =>
+// ['wlan0', 'wlan1']
 ```
 
 ## listNetworks(callback)

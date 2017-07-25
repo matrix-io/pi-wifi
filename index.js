@@ -18,6 +18,7 @@ const commands = {
   scan: 'sudo iwlist wlan0 scan | grep ESSID | cut \'"\' -f2',
   startSupplicant: 'sudo wpa_supplicant -Dwext -c :CONFIG_FILE -B -i :INTERFACE  && sudo chattr -i :DNS_FILE',
   wpaDisconnect: 'wpa_cli disconnect',
+  wpaListInterfaces: 'wpa_cli interface',
   wpaInterface: 'wpa_cli interface :INTERFACE',
   wpaList: 'wpa_cli list_networks'
 };
@@ -68,6 +69,7 @@ function findConnection(ssid, callback) {
     return callback(err, networkId);
   });
 }
+
 
 /**
 * @method setCurrentInterface
@@ -394,6 +396,41 @@ function startSupplicant(options, callback) {
 
 
 /**
+ * @method listInterfaces
+ * @description Returns an array of available interface names
+ * @param {function} callback (err, interfaces) Returns the error or an array of interface names
+ */
+function listInterfaces(callback) {
+  exec(commands.wpaListInterfaces, function (err, stdout) {
+    if (err) callback(err, null) // send back errors from the process
+
+    if (stdout) {
+      const lines = stdout.split('\n')
+      const interfaces = [] // to hold the interface names
+      const marker = 'available interfaces' // available interfaces appear one-per-line after this marker
+      var markerSeen = false // whether we've seen the marker yet
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i]
+
+        // if we've passed the marker line & the current line contains an interface name, add it to the
+        // list to be returned
+        if (markerSeen && line.length) {
+          interfaces.push(line.trim())
+        }
+
+        // if the current line is like the marker, record that we've seen it (for future loop iterations)
+        if (line.toLowerCase().substr(0, marker.length) === marker) {
+          markerSeen = true
+        }
+      }
+
+      callback(null, interfaces)
+    }
+  })
+}
+
+/**
  * @method interfaceUp
  * @description Raises the interface provided
  * @param {string} iface Interface to start
@@ -517,6 +554,7 @@ module.exports = {
   interfaceDown: interfaceDown,
   interfaceUp: interfaceUp,
   killSupplicant: disableSupplicant,
+  listInterfaces: listInterfaces,
   listNetworks: listNetworks,
   restartInterface: restartInterface,
   scan: scan,
