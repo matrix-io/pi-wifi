@@ -20,7 +20,7 @@ const commands = {
   wpaDisconnect: 'wpa_cli disconnect',
   wpaListInterfaces: 'wpa_cli interface',
   wpaInterface: 'wpa_cli interface :INTERFACE',
-  wpaList: 'wpa_cli list_networks -i ' + currentInterface
+  wpaList: 'wpa_cli list_networks -i :INTERFACE'
 };
 
 
@@ -477,7 +477,7 @@ function restartInterface(iface, callback) {
  * @param {function} callback (err, networksArray) returns err if the process fails, each network is a Json object that contains network_id, ssid, bssid and flags
  */
 function listNetworks(callback) {
-  exec(commands.wpaList, function (err, stdout) {
+  exec(replaceInCommand(commands.wpaList, { interface: currentInterface }), function (err, stdout) {
     var tempNetworkJson, parameters, networksArray;
 
     if (!err) {
