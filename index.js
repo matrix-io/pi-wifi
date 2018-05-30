@@ -20,7 +20,7 @@ const commands = {
   wpaDisconnect: 'wpa_cli disconnect',
   wpaListInterfaces: 'wpa_cli interface',
   wpaInterface: 'wpa_cli interface :INTERFACE',
-  wpaList: 'wpa_cli list_networks'
+  wpaList: 'wpa_cli list_networks -i ' + currentInterface
 };
 
 
@@ -78,7 +78,7 @@ function findConnection(ssid, callback) {
 * @param {function} callback Returns error if unable to set the interface
 */
 function setCurrentInterface(iface, callback) {
-  exec(replaceInCommand(commands.wpaInterface, { interface: iface }), function (err) { 
+  exec(replaceInCommand(commands.wpaInterface, { interface: iface }), function (err) {
     if (!err) currentInterface = iface;
     return callback(err);
   });
@@ -119,8 +119,8 @@ function prepareConnectionDetails(details) {
   }
 
   if (details.hasOwnProperty('eap')) params.eap = details.eap;
-  if (details.hasOwnProperty('phase1')) params.phase1 = details.phase2;
-  if (details.hasOwnProperty('phase2')) params.phase2 = details.phase2;
+  if (details.hasOwnProperty('phase1')) params.phase1 = '\'"' + details.phase1 + '"\'';
+  if (details.hasOwnProperty('phase2')) params.phase2 = '\'"' + details.phase2 + '"\'';
   if (details.hasOwnProperty('key_mgmt')) params.key_mgmt = details.key_mgmt; //Add Key management if found
 
   return params;
@@ -221,7 +221,7 @@ function secureConnection(ssid, password, callback) {
 }
 
 
-/** 
+/**
 * @method createConnection
 * @description Creates a connection record and returns its network id if successful
 * @param {Function(err, networkId)} callback Returns error if the network creation fails, Network id
@@ -273,7 +273,7 @@ function setNetworkParameter(interface, networkId, name, value, callback) {
 * status('wlan0', function(err, status){
 *   if(!err) console.log(status);
 * });
-* // => 
+* // =>
 * {
 *   bssid: '2c:f5:d3:02:ea:d9',
 *   frequency: 2412,
@@ -294,7 +294,7 @@ function status(iface, cb) {
   if (cb === undefined) {
     cb = iface;
     iface = currentInterface;
-  }  
+  }
   tools.wpa.status(iface, cb);
 }
 
@@ -339,10 +339,10 @@ function connectToId(networkId, callback) {
   tools.wpa.enable_network(currentInterface, networkId, function (err, data) {
     if (err || !data.hasOwnProperty('result') || data.result !== 'OK') return callback(err);
     //console.log('Saving config...');
-    tools.wpa.save_config(currentInterface, function (err) {
+    tools.wpa.select_network(currentInterface, networkId, function (err, data) {
       if (err || !data.hasOwnProperty('result') || data.result !== 'OK') return callback(err);
       //console.log('Selecting network...');
-      tools.wpa.select_network(currentInterface, networkId, function (err, data) {
+      tools.wpa.save_config(currentInterface, function (err) {
         if (err || !data.hasOwnProperty('result') || data.result !== 'OK') return callback(err);
         callback();
       });
@@ -387,7 +387,7 @@ function detectSupplicant(callback) {
  */
 function startSupplicant(options, callback) {
   if (callback === undefined) callback = options; //If no options is passed and just the callback is provided
-  
+
   var iface = options.hasOwnProperty('iface') ? options.iface : currentInterface;
   var configFile = options.hasOwnProperty('config') ? options.config : defaultSupplicantConfigFile;
   var dnsFile = options.hasOwnProperty('dns') ? options.dns : defaultDNSFile;
